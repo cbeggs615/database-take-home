@@ -168,7 +168,6 @@ def optimize_graph(
     # ---------------------------------------------------------------
 
     # Count total edges in the initial graph
-    total_edges = sum(len(edges) for edges in optimized_graph.values())
 
     # analyze_target_nodes(results)
 
@@ -190,7 +189,7 @@ def optimize_graph(
     for i in range(len(actually_targeted)):
         current = actually_targeted[i]
         next_node = actually_targeted[(i + 1) % len(actually_targeted)] #wraps
-        optimized_graph[current][next_node] = 1
+        optimized_graph[current][next_node] = 3
 
     # Minimal connectivity for other nodes
     for node in range(num_nodes):
