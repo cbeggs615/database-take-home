@@ -93,7 +93,11 @@ def optimize_graph(
     """
     print("Starting graph optimization...")
 
+    from collections import Counter, defaultdict
+    import heapq
+
     # Create a copy of the initial graph to modify
+
     optimized_graph = {}
     for node, edges in initial_graph.items():
         optimized_graph[node] = dict(edges)
@@ -130,32 +134,67 @@ def optimize_graph(
     # Count total edges in the initial graph
     total_edges = sum(len(edges) for edges in optimized_graph.values())
 
-    # If we exceed the limit, we need to prune edges
-    if total_edges > max_total_edges:
-        print(
-            f"Initial graph has {total_edges} edges, need to remove {total_edges - max_total_edges}"
-        )
 
-        # Example pruning logic (replace with your optimized strategy)
-        edges_to_remove = total_edges - max_total_edges
-        removed = 0
+    target_freq = Counter()
+    transitions_count = defaultdict(Counter)
+    node_importance = defaultdict(float)
 
-        # Sort nodes by number of outgoing edges (descending)
-        nodes_by_edge_count = sorted(
-            optimized_graph.keys(), key=lambda n: len(optimized_graph[n]), reverse=True
-        )
+    query_results = results.get('detailed_results', [])
 
-        # Remove edges from nodes with the most connections first
-        for node in nodes_by_edge_count:
-            if removed >= edges_to_remove:
-                break
+    # query = query_results[0]
+    # print(query)
+    # print("keys:", [key for key in query.keys()]) => ['target', 'is_success', 'median_path_length', 'paths']
 
-            # As a simplistic example, remove the edge with lowest weight
-            if len(optimized_graph[node]) > 1:  # Ensure node keeps at least one edge
-                # Find edge with minimum weight
-                min_edge = min(optimized_graph[node].items(), key=lambda x: x[1])
-                del optimized_graph[node][min_edge[0]]
-                removed += 1
+    for query in query_results:
+        target = query['target']
+        target_freq[target] +=1
+
+        if query['is_success']:
+            paths = query.get('paths', [])
+            for path_info in paths:
+                if path_info[0]: #successful
+                    path = path_info[1]
+                    for i in range(len(path)-1):
+                        source, dest = path[i], path[i+1]
+                        transitions_count[source][dest]+=1
+
+                    # for last transition, give extra weight (directly connected to target)
+                    if len(path)>=2 and path[-1]==target:
+                        last_source = path[-2]
+                        transitions_count[last_source][target]+=5
+
+    # find node importance by seeing how often is was targeted
+    total_queries = sum(target_freq.values())
+    node_importance = {node: count/total_queries * 100 for node,count in target_freq.items()}
+
+
+
+    # # If we exceed the limit, we need to prune edges
+    # if total_edges > max_total_edges:
+    #     print(
+    #         f"Initial graph has {total_edges} edges, need to remove {total_edges - max_total_edges}"
+    #     )
+
+    #     # Example pruning logic (replace with your optimized strategy)
+    #     edges_to_remove = total_edges - max_total_edges
+    #     removed = 0
+
+    #     # Sort nodes by number of outgoing edges (descending)
+    #     nodes_by_edge_count = sorted(
+    #         optimized_graph.keys(), key=lambda n: len(optimized_graph[n]), reverse=True
+    #     )
+
+    #     # Remove edges from nodes with the most connections first
+    #     for node in nodes_by_edge_count:
+    #         if removed >= edges_to_remove:
+    #             break
+
+    #         # As a simplistic example, remove the edge with lowest weight
+    #         if len(optimized_graph[node]) > 1:  # Ensure node keeps at least one edge
+    #             # Find edge with minimum weight
+    #             min_edge = min(optimized_graph[node].items(), key=lambda x: x[1])
+    #             del optimized_graph[node][min_edge[0]]
+    #             removed += 1
 
     # =============================================================
     # End of your implementation
