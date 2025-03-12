@@ -212,7 +212,7 @@ def optimize_graph(
     # all nodes have at least one outgoing edge for connectivity
     for node in range(num_nodes):
         if out_edges[node] == 0 and edge_count < max_total_edges:
-            # Find best target based on target importance
+            # find best target based on importance
             best_target = None
             best_score = -1
 
@@ -232,33 +232,31 @@ def optimize_graph(
             out_edges[node] += 1
             edge_count += 1
 
+    # add connections to important nodes
 
-    # # If we exceed the limit, we need to prune edges
-    # if total_edges > max_total_edges:
-    #     print(
-    #         f"Initial graph has {total_edges} edges, need to remove {total_edges - max_total_edges}"
-    #     )
+    if edge_count < max_total_edges:
+        important_nodes = sorted(node_importance.items(), key=lambda x: x[1], reverse=True)
+        # top 20 nodes
+        top_nodes = [node for node, _ in important_nodes[:20]]
 
-    #     # Example pruning logic (replace with your optimized strategy)
-    #     edges_to_remove = total_edges - max_total_edges
-    #     removed = 0
 
-    #     # Sort nodes by number of outgoing edges (descending)
-    #     nodes_by_edge_count = sorted(
-    #         optimized_graph.keys(), key=lambda n: len(optimized_graph[n]), reverse=True
-    #     )
 
-    #     # Remove edges from nodes with the most connections first
-    #     for node in nodes_by_edge_count:
-    #         if removed >= edges_to_remove:
-    #             break
+        # make heap for important connections
+        addtl_edges = []
+        for source in range (num_nodes):
+            if out_edges[source] < max_edges_per_node:
+                for target in top_nodes:
+                    if source != target and target not in optimized_graph[source]:
+                        # priority based on target importance
+                        priority = node_importance.get(target, 0)
+                        heapq.heappush(addtl_edges, (-priority, source, target))
 
-    #         # As a simplistic example, remove the edge with lowest weight
-    #         if len(optimized_graph[node]) > 1:  # Ensure node keeps at least one edge
-    #             # Find edge with minimum weight
-    #             min_edge = min(optimized_graph[node].items(), key=lambda x: x[1])
-    #             del optimized_graph[node][min_edge[0]]
-    #             removed += 1
+        while addtl_edges and edge_count<max_total_edges:
+            _, source, target = heapq.heappop(addtl_edges)
+            if out_edges[source] < max_edges_per_node and target not in optimized_graph[source]:
+                optimized_graph[source][target] = 10.0  # max weight for important connections
+                out_edges[source] += 1
+                edge_count += 1
 
     # =============================================================
     # End of your implementation
