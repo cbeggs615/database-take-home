@@ -173,190 +173,32 @@ def optimize_graph(
     # analyze_target_nodes(results)
 
     target_freq = Counter()
-    transitions_count = defaultdict(Counter)
-    node_importance = defaultdict(float)
 
     query_results = results.get('detailed_results', [])
-
 
     for query in query_results:
         target = query['target']
         target_freq[target] +=1
 
-        if query['is_success']:
-            paths = query.get('paths', [])
-            for path_info in paths:
-                if path_info[0]: #successful
-                    path = path_info[1]
-                    for i in range(len(path)-1):
-                        source, dest = path[i], path[i+1]
-                        transitions_count[source][dest]+=1
+    important_nodes = sorted(target_freq.keys(), key=lambda node: target_freq[node], reverse=True)
+    targets = 45
+    actually_targeted = [node for node in important_nodes if node < targets]
 
-                    # for last transition, give extra weight (directly connected to target)
-                    if len(path)>=2 and path[-1]==target:
-                        last_source = path[-2]
-                        transitions_count[last_source][target]+=5
+    optimized_graph = {node: {} for node in range(num_nodes)}
 
+    # Create first cycle of connections
+    for i in range(len(actually_targeted)):
+        current = actually_targeted[i]
+        next_node = actually_targeted[(i + 1) % len(actually_targeted)] #wraps
+        optimized_graph[current][next_node] = 1
 
+    # Minimal connectivity for other nodes
+    for node in range(num_nodes):
+        if node >= targets:
+            optimized_graph[node][actually_targeted[0]] = 1
 
-    # find node importance by seeing how often is was targeted
-    total_queries = sum(target_freq.values())
-    node_importance = {node: count/total_queries * 100 for node,count in target_freq.items()}
+    optimized_graph[actually_targeted[-1]][actually_targeted[0]] = 4
 
-    valid_nodes = set(range(45))  # Nodes to prioritize
-
-    edge_queue = []
-    edge_count = 0
-    out_edges = {node: 0 for node in range(num_nodes)}
-
-    for source in range(num_nodes):
-        for target in range(num_nodes):
-            if source in valid_nodes and target in valid_nodes and source != target:
-                utility = 0
-                utility += transitions_count[source][target] * 2
-                utility += node_importance.get(target, 0)
-                utility += 0.01  # Baseline utility
-                heapq.heappush(edge_queue, (-utility, source, target))
-
-    # Build graph primarily for valid nodes
-    while edge_queue and edge_count < max_total_edges:
-        utility, source, target = heapq.heappop(edge_queue)
-        if out_edges[source] >= max_edges_per_node:
-            continue
-        weight = min(10.0, 1.0 + 9.0 * min(1.0, (-utility) / 50))  # Weight based on utility
-        optimized_graph[source][target] = weight
-        out_edges[source] += 1
-        edge_count += 1
-
-    # Ensure nodes >= 45 have minimal connectivity if required
-    for node in range(45, num_nodes):
-        if out_edges[node] < max_edges_per_node and edge_count < max_total_edges:
-            # Connect to valid nodes with high importance
-            best_target = None
-            best_score = -1
-
-            for valid_node in valid_nodes:
-                if valid_node not in optimized_graph[node]:
-                    score = node_importance.get(valid_node, 0)
-                    if score > best_score:
-                        best_score = score
-                        best_target = valid_node
-
-            if best_target is not None:
-                weight = 1.0 + 9.0 * (best_score / 100)  # Scale weight based on importance
-                optimized_graph[node][best_target] = min(10.0, weight)  # Add edge
-                out_edges[node] += 1
-                edge_count += 1
-
-    # if edge_count < max_total_edges:
-    #     for source in valid_nodes:
-    #         for target in valid_nodes:
-    #             if source != target and target not in optimized_graph[source]:
-    #                 utility = transitions_count[source][target] * 2
-    #                 utility += node_importance.get(target, 0)
-    #                 if utility > 0:  # Only add useful edges
-    #                     weight = min(10.0, 1.0 + 9.0 * (utility / 50))
-    #                     optimized_graph[source][target] = weight
-    #                     out_edges[source] += 1
-    #                     edge_count += 1
-    #                     if edge_count >= max_total_edges:
-    #                         break
-
-    # # find node importance by seeing how often is was targeted
-    # total_queries = sum(target_freq.values())
-    # node_importance = {node: count/total_queries * 100 for node,count in target_freq.items()}
-
-
-    # # priority queue of potential edges based on usefulness
-
-    # edge_queue = []
-
-    # for source in range(num_nodes):
-    #     for target in range (num_nodes):
-    #         if source == target :
-    #             continue # no self loops
-
-    #         utility = 0
-    #         # utility if from how many times that edge was taken in successful paths
-    #         utility += transitions_count[source][target] * 2
-
-    #         # if target is important (more common), edge is more useful
-    #         utility += node_importance.get(target, 0)
-
-    #         # all edges have some utility
-    #         utility += 0.01
-
-    #         # min-heap of negative utility (to get highest utility first)
-    #         heapq.heappush(edge_queue, (-utility, source, target))
-
-    # # now build graph by adding most useful edges first
-    # edge_count = 0
-    # out_edges = {node: 0 for node in range(num_nodes)}
-
-    # while edge_queue and edge_count < max_total_edges:
-    #     utility, source, target = heapq.heappop(edge_queue)
-    #     if out_edges[source] >= max_edges_per_node:
-    #         continue
-
-    #     raw_utility = -utility if utility < 0 else 0 #since it was entered as - in queue
-
-    #     # find edge weight
-    #     # higher edge weight means more likely to be used, so for most useful edges
-    #     weight = min(10.0, 1.0 + 9.0 * min(1.0, raw_utility / 50))
-
-    #     # Add edge to graph
-    #     optimized_graph[source][target] = weight
-    #     out_edges[source] += 1
-    #     edge_count += 1
-
-    # # all nodes have at least one outgoing edge for connectivity
-    # for node in range(num_nodes):
-    #     if out_edges[node] == 0 and edge_count < max_total_edges:
-    #         # find best target based on importance
-    #         best_target = None
-    #         best_score = -1
-
-    #         for potential_target in range(num_nodes):
-    #             if potential_target != node:
-    #                 score = node_importance.get(potential_target, 0)
-    #                 if score > best_score:
-    #                     best_score = score
-    #                     best_target = potential_target
-
-    #         # If no important targets found, connect to a random node
-    #         if best_target is None:
-    #             best_target = (node + 1) % num_nodes  # Avoid self-loops
-
-    #         # Add edge with maximum weight for better connectivity
-    #         optimized_graph[node][best_target] = 10.0
-    #         out_edges[node] += 1
-    #         edge_count += 1
-
-    # # add connections to important nodes
-
-    # if edge_count < max_total_edges:
-    #     important_nodes = sorted(node_importance.items(), key=lambda x: x[1], reverse=True)
-    #     # top 20 nodes
-    #     top_nodes = [node for node, _ in important_nodes[:20]]
-
-
-
-    #     # make heap for important connections
-    #     addtl_edges = []
-    #     for source in range (num_nodes):
-    #         if out_edges[source] < max_edges_per_node:
-    #             for target in top_nodes:
-    #                 if source != target and target not in optimized_graph[source]:
-    #                     # priority based on target importance
-    #                     priority = node_importance.get(target, 0)
-    #                     heapq.heappush(addtl_edges, (-priority, source, target))
-
-    #     while addtl_edges and edge_count<max_total_edges:
-    #         _, source, target = heapq.heappop(addtl_edges)
-    #         if out_edges[source] < max_edges_per_node and target not in optimized_graph[source]:
-    #             optimized_graph[source][target] = 10.0  # max weight for important connections
-    #             out_edges[source] += 1
-    #             edge_count += 1
 
     # =============================================================
     # End of your implementation
